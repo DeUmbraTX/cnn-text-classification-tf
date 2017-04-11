@@ -1,13 +1,21 @@
 #! /usr/bin/env python
-
-import tensorflow as tf
-import numpy as np
 import os
+import sys
 import time
+import logging
 import datetime
+from os.path import join
+
+import numpy as np
+import tensorflow as tf
+from tensorflow.contrib import learn
+
 import data_helpers
 from text_cnn import TextCNN
-from tensorflow.contrib import learn
+
+logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
+
+basedir = '/storage/twitter/streams/french-elections/cnn-clf'
 
 # Parameters
 # ==================================================
@@ -16,6 +24,8 @@ from tensorflow.contrib import learn
 tf.flags.DEFINE_float("dev_sample_percentage", .1, "Percentage of the training data to use for validation")
 tf.flags.DEFINE_string("positive_data_file", "./data/rt-polaritydata/rt-polarity.pos", "Data source for the positive data.")
 tf.flags.DEFINE_string("negative_data_file", "./data/rt-polaritydata/rt-polarity.neg", "Data source for the negative data.")
+tf.flags.DEFINE_string("x_path", join(basedir, 'x.txt'), "path to x")
+tf.flags.DEFINE_string("y_path", join(basedir, 'y.txt'), "path to y")
 
 # Model Hyperparameters
 tf.flags.DEFINE_integer("embedding_dim", 128, "Dimensionality of character embedding (default: 128)")
@@ -33,21 +43,39 @@ tf.flags.DEFINE_integer("num_checkpoints", 5, "Number of checkpoints to store (d
 # Misc Parameters
 tf.flags.DEFINE_boolean("allow_soft_placement", True, "Allow device soft device placement")
 tf.flags.DEFINE_boolean("log_device_placement", False, "Log placement of ops on devices")
+tf.flags.DEFINE_boolean("use_orig", False, "Use original pre-fork setup for MR polarity data.")
+tf.flags.DEFINE_string("run_id", "", "identifier for this run")
 
 FLAGS = tf.flags.FLAGS
 FLAGS._parse_flags()
-print("\nParameters:")
+logging.info("\nParameters:")
 for attr, value in sorted(FLAGS.__flags.items()):
-    print("{}={}".format(attr.upper(), value))
-print("")
+    logging.info("{}={}".format(attr.upper(), value))
+logging.info("")
 
+"""
+# orignal MR data
+2017-04-08 16:48:55,601 : INFO : Vocabulary Size: 18758
+2017-04-08 16:48:55,602 : INFO : Train/Dev split: 9596/1066
+
+# tweets (mx toks 512)
+2017-04-08 18:37:27,370 : INFO : Vocabulary Size: 45308
+2017-04-08 18:37:27,370 : INFO : Train/Dev split: 7182/798
+
+# tweets (mx toks 1000)
+2017-04-08 23:40:42,377 : INFO : Vocabulary Size: 49698
+2017-04-08 23:40:42,377 : INFO : Train/Dev split: 7182/798
+"""
 
 # Data Preparation
 # ==================================================
 
 # Load data
-print("Loading data...")
-x_text, y = data_helpers.load_data_and_labels(FLAGS.positive_data_file, FLAGS.negative_data_file)
+logging.info("Loading data...")
+if FLAGS.use_orig:
+    x_text, y = data_helpers.load_data_and_labels(FLAGS.positive_data_file, FLAGS.negative_data_file)
+else:
+    x_text, y = data_helpers.load_data_and_labels_v2(FLAGS.x_path, FLAGS.y_path)
 
 # Build vocabulary
 max_document_length = max([len(x.split(" ")) for x in x_text])
@@ -65,9 +93,15 @@ y_shuffled = y[shuffle_indices]
 dev_sample_index = -1 * int(FLAGS.dev_sample_percentage * float(len(y)))
 x_train, x_dev = x_shuffled[:dev_sample_index], x_shuffled[dev_sample_index:]
 y_train, y_dev = y_shuffled[:dev_sample_index], y_shuffled[dev_sample_index:]
-print("Vocabulary Size: {:d}".format(len(vocab_processor.vocabulary_)))
-print("Train/Dev split: {:d}/{:d}".format(len(y_train), len(y_dev)))
 
+logging.info("Vocabulary Size: {:d}".format(len(vocab_processor.vocabulary_)))
+logging.info("Train/Dev split: {:d}/{:d}".format(len(y_train), len(y_dev)))
+logging.info("max doc length:  {:d}".format(max_document_length))
+
+sys.exit(0)
+
+# t0 = x_text[0]
+# t1 = list(vocab_processor.reverse([x[0]]))[0]
 
 # Training
 # ==================================================
@@ -104,9 +138,15 @@ with tf.Graph().as_default():
         grad_summaries_merged = tf.summary.merge(grad_summaries)
 
         # Output directory for models and summaries
-        timestamp = str(int(time.time()))
-        out_dir = os.path.abspath(os.path.join(os.path.curdir, "runs", timestamp))
-        print("Writing to {}\n".format(out_dir))
+        if not FLAGS.run_id:
+            timestamp = str(int(time.time()))
+            out_dir = os.path.abspath(os.path.join(os.path.curdir, "runs", timestamp))
+        else:
+            out_dir = os.path.abspath(os.path.join(basedir, 'runs', FLAGS.run_id))
+            if not os.path.exists(out_dir):
+                os.makedirs(out_dir)
+
+        logging.info("Writing to {}\n".format(out_dir))
 
         # Summaries for loss and accuracy
         loss_summary = tf.summary.scalar("loss", cnn.loss)
@@ -147,8 +187,8 @@ with tf.Graph().as_default():
             _, step, summaries, loss, accuracy = sess.run(
                 [train_op, global_step, train_summary_op, cnn.loss, cnn.accuracy],
                 feed_dict)
-            time_str = datetime.datetime.now().isoformat()
-            print("{}: step {}, loss {:g}, acc {:g}".format(time_str, step, loss, accuracy))
+
+            logging.info("step {}, loss {:g}, acc {:g}".format(step, loss, accuracy))
             train_summary_writer.add_summary(summaries, step)
 
         def dev_step(x_batch, y_batch, writer=None):
@@ -163,23 +203,25 @@ with tf.Graph().as_default():
             step, summaries, loss, accuracy = sess.run(
                 [global_step, dev_summary_op, cnn.loss, cnn.accuracy],
                 feed_dict)
-            time_str = datetime.datetime.now().isoformat()
-            print("{}: step {}, loss {:g}, acc {:g}".format(time_str, step, loss, accuracy))
+
+            logging.info("step {}, loss {:g}, acc {:g}".format(step, loss, accuracy))
+
             if writer:
                 writer.add_summary(summaries, step)
 
         # Generate batches
         batches = data_helpers.batch_iter(
             list(zip(x_train, y_train)), FLAGS.batch_size, FLAGS.num_epochs)
+
         # Training loop. For each batch...
         for batch in batches:
             x_batch, y_batch = zip(*batch)
             train_step(x_batch, y_batch)
             current_step = tf.train.global_step(sess, global_step)
             if current_step % FLAGS.evaluate_every == 0:
-                print("\nEvaluation:")
+                logging.info("\nEvaluation:")
                 dev_step(x_dev, y_dev, writer=dev_summary_writer)
-                print("")
+                logging.info("")
             if current_step % FLAGS.checkpoint_every == 0:
                 path = saver.save(sess, checkpoint_prefix, global_step=current_step)
-                print("Saved model checkpoint to {}\n".format(path))
+                logging.info("Saved model checkpoint to {}\n".format(path))

@@ -53,11 +53,15 @@ print("\nEvaluating...\n")
 # ==================================================
 checkpoint_file = tf.train.latest_checkpoint(FLAGS.checkpoint_dir)
 graph = tf.Graph()
+
 with graph.as_default():
+
     session_conf = tf.ConfigProto(
       allow_soft_placement=FLAGS.allow_soft_placement,
       log_device_placement=FLAGS.log_device_placement)
+
     sess = tf.Session(config=session_conf)
+
     with sess.as_default():
         # Load the saved meta graph and restore variables
         saver = tf.train.import_meta_graph("{}.meta".format(checkpoint_file))
@@ -93,3 +97,4 @@ out_path = os.path.join(FLAGS.checkpoint_dir, "..", "prediction.csv")
 print("Saving evaluation to {0}".format(out_path))
 with open(out_path, 'w') as f:
     csv.writer(f).writerows(predictions_human_readable)
+
