@@ -15,8 +15,6 @@ from text_cnn import TextCNN
 
 logging.basicConfig(format='%(asctime)s : %(levelname)s : %(message)s', level=logging.INFO)
 
-basedir = '/storage/twitter/streams/french-elections/cnn-clf'
-
 # Parameters
 # ==================================================
 
@@ -24,8 +22,8 @@ basedir = '/storage/twitter/streams/french-elections/cnn-clf'
 tf.flags.DEFINE_float("dev_sample_percentage", .1, "Percentage of the training data to use for validation")
 tf.flags.DEFINE_string("positive_data_file", "./data/rt-polaritydata/rt-polarity.pos", "Data source for the positive data.")
 tf.flags.DEFINE_string("negative_data_file", "./data/rt-polaritydata/rt-polarity.neg", "Data source for the negative data.")
-tf.flags.DEFINE_string("x_path", join(basedir, 'x.txt'), "path to x")
-tf.flags.DEFINE_string("y_path", join(basedir, 'y.txt'), "path to y")
+tf.flags.DEFINE_string('data_dir', '/storage/twitter/streams/french-elections/cnn-clf/v3', "Directory with all the data.")
+tf.flags.DEFINE_boolean("combine_langs", False, "Combine english and french language files.")
 
 # Model Hyperparameters
 tf.flags.DEFINE_integer("embedding_dim", 128, "Dimensionality of character embedding (default: 128)")
@@ -48,6 +46,10 @@ tf.flags.DEFINE_string("run_id", "", "identifier for this run")
 
 FLAGS = tf.flags.FLAGS
 FLAGS._parse_flags()
+if FLAGS.x_path and FLAGS.y_path:
+    FLAGS.positive_data_file = ''
+    FLAGS.negative_data_file = ''
+    
 logging.info("\nParameters:")
 for attr, value in sorted(FLAGS.__flags.items()):
     logging.info("{}={}".format(attr.upper(), value))
@@ -75,7 +77,12 @@ logging.info("Loading data...")
 if FLAGS.use_orig:
     x_text, y = data_helpers.load_data_and_labels(FLAGS.positive_data_file, FLAGS.negative_data_file)
 else:
-    x_text, y = data_helpers.load_data_and_labels_v2(FLAGS.x_path, FLAGS.y_path)
+    if not FLAGS.combine_langs:
+        x_path = join(FLAGS.data_dir, 'x.txt')
+        y_path = join(FLAGS.data_dir, 'y.txt')
+        x_text, y = data_helpers.load_data_and_labels_v2(x_path, y_path)
+    else:
+        x_text, y = data_helpers.load_data_and_labels_v3(FLAGS.data_dir)
 
 # Build vocabulary
 max_document_length = max([len(x.split(" ")) for x in x_text])
@@ -98,7 +105,7 @@ logging.info("Vocabulary Size: {:d}".format(len(vocab_processor.vocabulary_)))
 logging.info("Train/Dev split: {:d}/{:d}".format(len(y_train), len(y_dev)))
 logging.info("max doc length:  {:d}".format(max_document_length))
 
-sys.exit(0)
+#sys.exit(0)
 
 # t0 = x_text[0]
 # t1 = list(vocab_processor.reverse([x[0]]))[0]
@@ -142,7 +149,7 @@ with tf.Graph().as_default():
             timestamp = str(int(time.time()))
             out_dir = os.path.abspath(os.path.join(os.path.curdir, "runs", timestamp))
         else:
-            out_dir = os.path.abspath(os.path.join(basedir, 'runs', FLAGS.run_id))
+            out_dir = os.path.abspath(os.path.join(FLAGS.data_dir, 'runs', FLAGS.run_id))
             if not os.path.exists(out_dir):
                 os.makedirs(out_dir)
 

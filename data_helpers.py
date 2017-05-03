@@ -1,6 +1,7 @@
 import io
 import re
 import itertools
+from os.path import join
 from collections import Counter
 import numpy as np
 
@@ -49,6 +50,47 @@ def load_data_and_labels(positive_data_file, negative_data_file):
 def load_data_and_labels_v2(x_path, y_path):
     x_text = list(io.open(x_path, 'r', encoding='utf-8').readlines())
     y = list(io.open(y_path, 'r', encoding='utf-8').readlines())
+
+    x_text = [s.strip() for s in x_text]
+    y = np.array([int(s.strip()) for s in y])
+    assert len(x_text) == len(y)
+
+    # one-hot encode the integer labels in y
+    n = len(y)
+    n_labels = len(np.unique(y))
+    y_enc = np.zeros((n, n_labels), dtype=np.int32)
+    y_enc[np.arange(n), y] = 1
+    assert len(x_text) == len(y_enc)
+    return [x_text, y_enc]
+
+
+def load_data_and_labels_v3(base_dir):
+    "Combine french and english language files."
+
+    print('\nCombining language files...\n')
+
+    x_path = join(base_dir, 'x-en.txt')
+    y_path = join(base_dir, 'y-en.txt')
+
+    x_text = list(io.open(x_path, 'r', encoding='utf-8').readlines())
+    y = list(io.open(y_path, 'r', encoding='utf-8').readlines())
+
+    assert len(x_text) == len(y)
+    print('n_en = {:,}'.format(len(y)))
+
+    x_path = join(base_dir, 'x-fr.txt')
+    y_path = join(base_dir, 'y-fr.txt')    
+
+    x_text_fr = list(io.open(x_path, 'r', encoding='utf-8').readlines())
+    y_fr = list(io.open(y_path, 'r', encoding='utf-8').readlines())
+
+    assert len(x_text_fr) == len(y_fr)
+    print('n_fr = {:,}'.format(len(y_fr)))
+
+    x_text += x_text_fr
+    y += y_fr
+
+    print('n_both = {:,}'.format(len(y)))
 
     x_text = [s.strip() for s in x_text]
     y = np.array([int(s.strip()) for s in y])
