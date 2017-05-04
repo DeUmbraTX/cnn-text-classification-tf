@@ -46,7 +46,7 @@ tf.flags.DEFINE_string("run_id", "", "identifier for this run")
 
 FLAGS = tf.flags.FLAGS
 FLAGS._parse_flags()
-if FLAGS.x_path and FLAGS.y_path:
+if FLAGS.data_dir:
     FLAGS.positive_data_file = ''
     FLAGS.negative_data_file = ''
     
