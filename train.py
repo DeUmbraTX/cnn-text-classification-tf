@@ -24,6 +24,7 @@ tf.flags.DEFINE_string("positive_data_file", "./data/rt-polaritydata/rt-polarity
 tf.flags.DEFINE_string("negative_data_file", "./data/rt-polaritydata/rt-polarity.neg", "Data source for the negative data.")
 tf.flags.DEFINE_string('data_dir', '/storage/twitter/streams/french-elections/cnn-clf/v3', "Directory with all the data.")
 tf.flags.DEFINE_boolean("combine_langs", False, "Combine english and french language files.")
+tf.flags.DEFINE_boolean("balance_two_class", False, "")
 
 # Model Hyperparameters
 tf.flags.DEFINE_integer("embedding_dim", 128, "Dimensionality of character embedding (default: 128)")
@@ -49,7 +50,7 @@ FLAGS._parse_flags()
 if FLAGS.data_dir:
     FLAGS.positive_data_file = ''
     FLAGS.negative_data_file = ''
-    
+
 logging.info("\nParameters:")
 for attr, value in sorted(FLAGS.__flags.items()):
     logging.info("{}={}".format(attr.upper(), value))
@@ -77,7 +78,11 @@ logging.info("Loading data...")
 if FLAGS.use_orig:
     x_text, y = data_helpers.load_data_and_labels(FLAGS.positive_data_file, FLAGS.negative_data_file)
 else:
-    if not FLAGS.combine_langs:
+    if FLAGS.balance_two_class:
+        x_path = join(FLAGS.data_dir, 'x.txt')
+        y_path = join(FLAGS.data_dir, 'y.txt')
+        x_text, y = data_helpers.load_data_and_labels_twoclass(x_path, y_path)
+    elif not FLAGS.combine_langs:
         x_path = join(FLAGS.data_dir, 'x.txt')
         y_path = join(FLAGS.data_dir, 'y.txt')
         x_text, y = data_helpers.load_data_and_labels_v2(x_path, y_path)

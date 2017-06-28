@@ -27,6 +27,21 @@ def clean_str(string):
     return string.strip().lower()
 
 
+def _balance(p, n):
+    num_pos = len(p)
+    num_neg = len(n)
+    new_num = min(num_pos, num_neg)
+    if (num_pos == num_neg):
+        print "training set is already balanced"
+    elif (num_neg > new_num):
+        n = np.random.choice(n, size=new_num, replace=False)
+        print "balanced training set by reducing negtive to {0}".format(new_num)
+    else:
+        p = np.random.choice(p, size=new_num, replace=False)
+        print "balanced training set by reducing positive to {0}".format(new_num)
+    return (p, n)
+
+
 def load_data_and_labels(positive_data_file, negative_data_file):
     """
     Loads MR polarity data from files, splits the data into words and generates labels.
@@ -37,6 +52,8 @@ def load_data_and_labels(positive_data_file, negative_data_file):
     positive_examples = [s.strip() for s in positive_examples]
     negative_examples = list(open(negative_data_file, "r").readlines())
     negative_examples = [s.strip() for s in negative_examples]
+    # balance positive and negative examples
+    positive_examples, negative_examples = _balance(positive_examples, negative_examples)
     # Split by words
     x_text = positive_examples + negative_examples
     x_text = [clean_str(sent) for sent in x_text]
@@ -63,6 +80,29 @@ def load_data_and_labels_v2(x_path, y_path):
     assert len(x_text) == len(y_enc)
     return [x_text, y_enc]
 
+def load_data_and_labels_twoclass(x_path, y_path):
+    x_text = list(io.open(x_path, 'r', encoding='utf-8').readlines())
+    y = list(io.open(y_path, 'r', encoding='utf-8').readlines())
+
+    x_text = [s.strip() for s in x_text]
+    y = np.array([int(s.strip()) for s in y])
+    assert len(x_text) == len(y)
+
+    # balance
+    df = pd.DataFrame({'text': x_text, 'y': y})
+    num_neg = (df.y == 0).sum()
+    num_pos = (df.y == 1).sum()
+    positive_examples = df.loc[df.y==1].text
+    negative_examples = df.loc[df.y==0].text
+
+    positive_examples, negative_examples = _balance(positive_examples, negative_examples)
+    # balance returns changed things as ndarray
+    x_all = pd.Series(positive_examples).append(pd.Series(negative_examples))
+    positive_labels = [[0, 1] for _ in positive_examples]
+    negative_labels = [[1, 0] for _ in negative_examples]
+    y_enc = np.concatenate([positive_labels, negative_labels], 0)
+    return [x_all, y_enc]
+
 
 def load_data_and_labels_v3(base_dir):
     "Combine french and english language files."
@@ -79,7 +119,7 @@ def load_data_and_labels_v3(base_dir):
     print('n_en = {:,}'.format(len(y)))
 
     x_path = join(base_dir, 'x-fr.txt')
-    y_path = join(base_dir, 'y-fr.txt')    
+    y_path = join(base_dir, 'y-fr.txt')
 
     x_text_fr = list(io.open(x_path, 'r', encoding='utf-8').readlines())
     y_fr = list(io.open(y_path, 'r', encoding='utf-8').readlines())
